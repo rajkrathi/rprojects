@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/619424/d17d42b9d35f475e9b3464b1a6152775
+bundleId: https://api.rpubs.com/api/v1/document/619424/d17d42b9d35f475e9b3464b1a6152775
+url: http://rpubs.com/rathirajk/619424
+when: 1590979506.89743

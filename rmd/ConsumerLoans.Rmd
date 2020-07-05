@@ -1,0 +1,152 @@
+---
+title: "Consumer Debt"
+date: "5/16/2020"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE,message=FALSE }
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data used in this analysis is collected from FED reserve Microeconomic Data.
+<p> </p></P><b>
+ Input data layout </b>
+</P>
+```{r , warning=FALSE,message=FALSE }
+library(DT)
+library(dplyr)
+library(tidyverse)
+library(plotly)
+
+
+dfConsumerDebtData <- read.csv(file= "C:\\R\\RData\\ConsumerDebtData.txt" , header=TRUE, quote = "\"", sep="\t")
+str(dfConsumerDebtData)
+dfConsumerDebtDataPercent <- data.frame (Year = dfConsumerDebtData$Year)
+dfConsumerDebtDataPercent$MortgagePercent = dfConsumerDebtData$Mortgage/dfConsumerDebtData$Total  
+dfConsumerDebtDataPercent$HERevolvingPercent = dfConsumerDebtData$HERevolving /dfConsumerDebtData$Total 
+dfConsumerDebtDataPercent$HERevolvingPercent = dfConsumerDebtData$HERevolving /dfConsumerDebtData$Total 
+dfConsumerDebtDataPercent$AutoLoanPercent  = dfConsumerDebtData$AutoLoan   /dfConsumerDebtData$Total 
+dfConsumerDebtDataPercent$CreditCardPercent = dfConsumerDebtData$CreditCard  /dfConsumerDebtData$Total 
+dfConsumerDebtDataPercent$StudentLoanPercent  = dfConsumerDebtData$StudentLoan    /dfConsumerDebtData$Total 
+dfConsumerDebtDataPercent$OtherPercent = dfConsumerDebtData$Other   /dfConsumerDebtData$Total
+
+# Calculate the Percent change in consumer Debt 
+df2 <-(dfConsumerDebtData %>% 
+  arrange(desc(Year)) %>% 
+  mutate(pct_change = (Total/lead(Total) - 1) * 100))
+grConsumerLoan2014_2019<-with(filter(df2, df2$Year  > 2013 & df2$Year < 2020)  ,mean(pct_change))
+
+dt1 <- datatable(
+  dfConsumerDebtDataPercent
+  ,filter = "none"
+  ,rownames = FALSE
+  ,caption = htmltools::tags$caption(style = 'caption-side: top; text-align: center; font-size: 12px;font-weight: 900',
+                                     "Consumer debt percentage by loan categories ")
+  
+  ,options = list(    searching = FALSE,    ordering = FALSE,    paging = FALSE ,width="80%",
+                      initComplete = JS(
+                        "function(settings, json) {",
+                        "$(this.api().table().header()).css({'background-color': '#000', 'color': '#fff'});",
+                        "}")
+  )
+  ,colnames = c('Year','Mortgage%','HE%','Auto Loan%', 'Credit Card%', 'Student Loan%',  'Other Loan%'  )
+) %>%
+  formatPercentage(    c(      'MortgagePercent',      'HERevolvingPercent',      'AutoLoanPercent',      'CreditCardPercent',
+                               'StudentLoanPercent',      'OtherPercent'    ),
+                       digits = 2,
+                       interval = 3,
+                       mark = ",",
+                       dec.mark = getOption("OutDec")
+  ) %>%
+  
+  formatStyle('StudentLoanPercent', fontWeight = styleInterval(0.06, c( 'weight','bold')))%>%
+  formatStyle('AutoLoanPercent', fontWeight = styleInterval(0.08, c( 'weight','bold')))%>%
+  #formatStyle('AutoLoanPercent',color = styleInterval(3.4, c('red', 'white')),
+  #          backgroundColor = styleInterval(0.08, c('yellow', 'gray'))) %>% 
+  formatStyle('MortgagePercent',
+              background = styleColorBar(range(dfConsumerDebtDataPercent$MortgagePercent), 'lightblue'),
+              backgroundSize = '90% 80%',
+              backgroundRepeat = 'no-repeat',
+              backgroundPosition = 'center') %>% 
+  formatStyle('StudentLoanPercent',
+              background = styleColorBar(range(dfConsumerDebtDataPercent$StudentLoanPercent), 'lightblue'),
+              backgroundSize = '80% 70%',
+              backgroundRepeat = 'no-repeat',
+              backgroundPosition = 'center')
+ 
+
+
+```
+
+## Historical consumer debt
+<B> From 2014 to 2019 average consumer outstanding loan growth per year is `r toString(scales::percent(grConsumerLoan2014_2019/100))` 
+<p> Recent data overwhelmingly leads, after financial crisis of 2008 mortgage loans as overwhelming percentage of total consumer debt has dropped precipitously. </p>
+</B> 
+
+```{r , warning=FALSE,message=FALSE }
+dt1
+```
+
+```{r , warning=FALSE,message=FALSE }
+#### Plot the Consumer debt as GDP ratio
+dfConsumerDebtDataPercent$TotalDebtToGDP = dfConsumerDebtData$Total / dfConsumerDebtData$NominalGDP
+
+p1 <- plot_ly(x = dfConsumerDebtDataPercent$Year  ,
+              y =  dfConsumerDebtDataPercent$TotalDebtToGDP ,
+                type = "bar") 
+
+p1 <- p1 %>% layout(title = "Consumer Debt to Nominal GDP ratio",
+                    xaxis = list(title = ""),
+                    yaxis = list(title = "")) 
+p1 <- p1 %>% layout(yaxis = list(tickformat = "%"))
+```
+<B>Consumer debt to total nominal GDP has declined in recent years. The ratio is averaging around 66%. As consumer spending grew, borrowing percentage had held steady. Recent reduction in taxes and lower unemployment rate helped consumer to reduce debt load, increase spend and contribute to GDP growth</B> 
+
+```{r}
+p1
+```
+
+<B> Student loan has been on the rise. As we can see below size of the circle represent student loan as part of consumer loan. Student loan is non-collateral debt that should concern to the financial institute based on exposure to student loan category. With an economic downturn and high unemployment rate, without government help, student holding these massive loans unable to pay on time will be major concerns </B> 
+
+
+```{r , warning=FALSE,message=FALSE }
+dfConsumerDebtData$NonMortgage=dfConsumerDebtData$HERevolving+ dfConsumerDebtData$AutoLoan+ dfConsumerDebtData$CreditCard+dfConsumerDebtData$StudentLoan+ dfConsumerDebtData$Other
+
+
+fig <- plot_ly(dfConsumerDebtData, x = ~NonMortgage , y = ~Mortgage , text = ~Year, type = 'scatter',
+                        mode = 'markers', size = ~StudentLoan ,  color=~Year ,
+               marker = list( sizemode = 'diameter'), 
+               hovertemplate = paste('<i>Mortgage</i>: $%{y:.2f} T',
+                                     '<br><b>NonMortgage</b>: $%{x:.2f}T<br>', 
+                                     '<b>%{text}</b>')
+               
+               #hoverinfo="none"
+              )
+fig <- fig %>% layout(title = 'Non Mortgage to Mortgage Debt (trillion) held by Consumer ',
+                      xaxis = list(showgrid = TRUE),
+                      yaxis = list(showgrid = TRUE),
+                      showlegend = FALSE)
+
+fig
+```
+<B> Majority of growth in non-mortgage loans has occurred in student borrowings. If we plot the ratio of the students outstanding loans to non-mortgage outstanding total debt, it is on rise significantly to create major crisis.</B> 
+
+```{r , warning=FALSE,message=FALSE }
+dfConsumerDebtData$StudentLoanNonMortgageRatio=dfConsumerDebtData$StudentLoan/dfConsumerDebtData$NonMortgage
+
+
+p1 <- plot_ly(x = dfConsumerDebtData$Year  ,
+              y =  dfConsumerDebtData$StudentLoanNonMortgageRatio ,
+              type = "bar") 
+
+p1 <- p1 %>% layout(title = "Student loan to total non mortgage loan ratio",
+                    xaxis = list(title = ""),
+                    yaxis = list(title = "")) 
+p1 <- p1 %>% 
+  layout(yaxis = list(tickformat = "%"))
+
+p1
+```
+

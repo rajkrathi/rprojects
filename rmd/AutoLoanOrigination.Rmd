@@ -1,0 +1,164 @@
+---
+title: "Auto Loan Origination"
+date: "5/16/2020"
+output:
+  html_document:
+    code_folding: hide
+---
+
+<html>
+
+
+```{r setup, include=FALSE,message=FALSE, warning=FALSE }
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data used in this analysis is collected from FED reserve Microeconomic Data.
+<p> </p></P><b>
+ Input data layout </b>
+</P>
+```{r , warning=FALSE,message=FALSE }
+library(DT)
+library(dplyr)
+library(tidyverse)
+library(plotly)
+library(sqldf)
+
+dfAutoLoanOriginationData <- read.csv(file= "C:\\R\\RData\\AutoLoanOriginationData.txt" , header=TRUE, quote = "\"", sep="\t")
+str(dfAutoLoanOriginationData)
+
+# Summarize data by Year
+dfAutoLoanOriginationSummaryByYear <-  
+  sqldf("SELECT Year,'AutoLoan' LoanType,SUM(AutoLoan_Total) AllOrigination 
+        ,SUM(AutoLoan_620_LS) AutoLoan_620_LS
+        ,SUM(AutoLoan_620_659) AutoLoan_620_659
+        ,SUM(AutoLoan_620_LS)+SUM(AutoLoan_620_659)  AutoLoan_660_LS
+        ,SUM(AutoLoan_660_719) AutoLoan_660_719
+        ,SUM(AutoLoan_720_759) AutoLoan_720_759
+        ,SUM(AutoLoan_760_GT) AutoLoan_760_GT
+        ,SUM(AutoLoanOutstanding*1000) AutoLoanOutstanding
+        from dfAutoLoanOriginationData WHERE  Year < 2020 GROUP BY Year") 
+Origination2019 <- with(filter(dfAutoLoanOriginationSummaryByYear, dfAutoLoanOriginationSummaryByYear$Year  == 2019),mean(AllOrigination))
+
+# Calculate the Percent change in AutoLoanOrigination   
+dfAutoLoanOriginationByYear <-(dfAutoLoanOriginationSummaryByYear %>% 
+         arrange(desc(Year)) %>% 
+         mutate(pct_change = (AllOrigination/lead(AllOrigination) - 1) )   %>% 
+           mutate(pct_changeAutoLoanOutstanding = (AutoLoanOutstanding/lead(AutoLoanOutstanding) - 1)) 
+           )
+
+
+# Calculate the Percent change in autoloan origination
+df2 <-(dfAutoLoanOriginationSummaryByYear %>% 
+  arrange(desc(Year)) %>% 
+  mutate(pct_change = (AutoLoanOutstanding/lead(AutoLoanOutstanding) - 1) * 100))
+z<-with(filter(df2, df2$Year  > 2008 & df2$Year < 2020)  ,mean(pct_change))
+
+```
+<b>During the prior 10 years, automobile loan origination has had consistent growth. 
+Auto originations in year 2019 reached to `r toString(round(Origination2019, digits=2))`  billion . New loan growth rate for the past 10 years is  `r toString(round(z, digits=2))`% <p>
+The new loan growth rate has been steady over the last 10 years. </p>
+</b>
+```{r , warning=FALSE,message=FALSE }
+#### Plot the AutoLoan origination 
+dfAutoLoanOriginationDataPlot <-   
+  sqldf("SELECT *
+        from dfAutoLoanOriginationData WHERE  Year < 2020 AND Year > 2008") 
+
+p1 <- plot_ly(x = dfAutoLoanOriginationDataPlot$Year  ,
+              y =  dfAutoLoanOriginationDataPlot$AutoLoan_Total ,
+                type = "bar") 
+
+p1 <- p1 %>% layout(title = "Auto Loan Origination (in Billion)",
+                    xaxis = list(title = ""),
+                    yaxis = list(title = "")) 
+p1 <- p1 %>% 
+  layout(yaxis = list(tickformat = "$"))
+
+p1
+
+```
+
+
+
+```{r , warning=FALSE,message=FALSE }
+dfAutoLoanPercent <- data.frame (Year = dfAutoLoanOriginationByYear$Year)
+dfAutoLoanPercent$AutoLoan_660_LSPercent = dfAutoLoanOriginationByYear$AutoLoan_660_LS/dfAutoLoanOriginationByYear$AllOrigination   
+dfAutoLoanPercent$AutoLoan_660_719Percent = dfAutoLoanOriginationByYear$AutoLoan_660_719  /dfAutoLoanOriginationByYear$AllOrigination  
+dfAutoLoanPercent$AutoLoan_720_759Percent = dfAutoLoanOriginationByYear$AutoLoan_720_759  /dfAutoLoanOriginationByYear$AllOrigination  
+dfAutoLoanPercent$AutoLoan_760_GTPercent  = dfAutoLoanOriginationByYear$AutoLoan_760_GT   /dfAutoLoanOriginationByYear$AllOrigination
+AvgAutoLoan_660_LSPercent<-with(dfAutoLoanPercent  ,mean(AutoLoan_660_LSPercent))*100
+AvgAutoLoan_660_719Percent<-with(dfAutoLoanPercent ,mean(AutoLoan_660_719Percent))*100
+AvgAutoLoan_720_759Percent<-with(dfAutoLoanPercent  ,mean(AutoLoan_720_759Percent))*100
+AvgAutoLoan_760_GTPercent<-with( dfAutoLoanPercent ,mean(AutoLoan_760_GTPercent))*100 
+
+  
+
+AvgAutoLoan_660_LSPercentPrior2008<-with(filter (dfAutoLoanPercent,dfAutoLoanPercent$Year < 2008)  ,mean(AutoLoan_660_LSPercent))*100
+
+AvgAutoLoan_660_LSPercentAfter2008<-with(filter (dfAutoLoanPercent,dfAutoLoanPercent$Year > 2008)   ,mean(AutoLoan_660_LSPercent))*100
+```
+
+<b><p>
+Loan  origination growth across different credit band has also stayed similar over the period. Percentage of originations across different credit band history shows consistent pattern with   
+average origination percent by credit score range </p> <li>Less than 660 :  `r toString(round(AvgAutoLoan_660_LSPercent, digits=3))`% </li>
+<li>660 - 719 :`r toString(round(AvgAutoLoan_660_719Percent, digits=3))`%   </li>
+<li>720 - 759 : `r toString(round(AvgAutoLoan_720_759Percent, digits=3))`%   </li>
+<li>Greater than 760 : `r toString(round(AvgAutoLoan_760_GTPercent, digits=3))`%   </li> </B>
+```{r , warning=FALSE,message=FALSE }
+datatable(
+  dfAutoLoanPercent
+  ,filter = "none"
+  ,rownames = FALSE
+  ,caption = htmltools::tags$caption(style = 'caption-side: top; text-align: center; font-size: 20px;font-weight: 900',
+                                     "New Autoloans by Credit Score")
+  
+  ,options = list(    searching = FALSE,    ordering = FALSE,    paging = FALSE ,width="80%",
+                      initComplete = JS(
+                        "function(settings, json) {",
+                        "$(this.api().table().header()).css({'background-color': '#000', 'color': '#fff'});",
+                        "}")
+  )
+  ,colnames = c('Year','< 660 %','660 - 719 %','720-759%', '>= 760 %' )
+) %>%
+  formatPercentage(    c(  'AutoLoan_660_LSPercent',  'AutoLoan_660_719Percent', 'AutoLoan_720_759Percent', 'AutoLoan_760_GTPercent'  ),
+                       digits = 2,
+                       interval = 3,
+                       mark = ",",
+                       dec.mark = getOption("OutDec")
+  ) 
+
+```
+<b>Prior to financial crisis of 2008 originations in the lower credit scores were hovering around `r toString(round(AvgAutoLoan_660_LSPercentPrior2008, digits=2))`% total new loans. But recent 5 years history shows consistent   `r toString(round(AvgAutoLoan_660_LSPercentAfter2008, digits=2))`%
+of the new auto loans are underwritten in lower than 660 scores.
+</B>
+```{r , warning=FALSE,message=FALSE }
+fig <- plot_ly(type = 'box')
+fig <- fig %>% add_trace( y = ~dfAutoLoanPercent$AutoLoan_660_LSPercent, type = "box",name="< 660")
+fig <- fig %>% add_trace(y = ~dfAutoLoanPercent$AutoLoan_660_719Percent,name="660 to 719")
+fig <- fig %>% add_trace(y = ~dfAutoLoanPercent$AutoLoan_720_759Percent,name="720 to 759")
+fig <- fig %>% add_trace(y = ~dfAutoLoanPercent$AutoLoan_760_GTPercent,name="> 760+") 
+fig <- fig %>% layout(title = "Box Plot Loan origination % by credit score over the historical period",
+                      yaxis = list(title = "% Origination") )
+
+
+fig
+
+```
+<b>As origination rates stayed same, total outstanding auto loan balances are on rise.This leads to conclude that duration of these loans are on rise. Principal pay down is on decline. FED data does not breakout outstanding balance by credit scores. But if outstanding balances are rising in lower tier credit score, there will be big concerns in coming year heading to higher auto delinquency and significant losses (charge off) after COVID-19.
+</b>
+
+```{r , warning=FALSE,message=FALSE }
+p1 <- plot_ly(x = dfAutoLoanOriginationSummaryByYear$Year  ,
+              y =  dfAutoLoanOriginationSummaryByYear$AllOrigination ,name = "Origination(million)",
+              type = "bar") 
+p1 <- p1 %>%  add_trace(x = dfAutoLoanOriginationSummaryByYear$Year, y=dfAutoLoanOriginationSummaryByYear$AutoLoanOutstanding,
+                        type = "bar",name = "Outstanding (Billion)" )
+
+p1 <- p1 %>% layout(title = "AutoLoan View (in Billion)",
+                    xaxis = list(title = ""),
+                    yaxis = list(title = "Loan Outstanding/New Loans",tickformat = "$") )
+ 
+p1
+```
+

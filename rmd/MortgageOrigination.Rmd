@@ -1,0 +1,166 @@
+---
+title: "Household Mortgage Debt"
+date: "5/16/2020"
+output:
+  html_document:
+    code_folding: hide
+    
+params: 
+  output_dir: "C:\\R\\Code\\Output"
+---
+
+<html>
+
+
+
+```{r setup, include=FALSE,message=FALSE }
+knitr::opts_chunk$set(echo = TRUE,root.dir = 'C:/R/Code/Output' )
+output_dir <- params$output_dir
+```
+
+## Consumer mortgage origination cycles
+ 
+Data used in this analysis is collected from FED reserve Microeconomic Data.
+<p> </p></P><b>
+Input data layout </b>
+</P>
+
+```{r mortgages01 , echo=TRUE, warning=FALSE,message=FALSE }
+getwd()
+## First specify the packages needed
+packages = c("sqldf", "reshape2",
+             "gt","dplyr","data.tree","tidyverse","glue","plotly","httr","scales","htmlTable")
+
+
+## Now load or install the listed packages
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+ 
+
+dfMO <- read.csv(file= "C:\\R\\RData\\FedMortgageOriginationLoanData.txt" , header=TRUE, quote = "\"", sep="\t")
+#dfMO
+#names(dfMO)
+
+#Print DF to html table
+#mytableout = htmlTable (dfMO, 
+       #caption="Input Dataset (billion $)")  
+str(dfMO) 
+```
+<p>
+<B> The graph summarizes mortgage origination over the period of time in all credit score range.<p> Origination data from the following scores:
+<ul>
+  <li>620 and lower</li>
+  <li>620-650 scores</li>
+  <li>660-719 scores</li>
+  <li>720-759 scores</li>
+  <li>760 and higher scores</li>
+</ul>
+is combined to get total origination by year.  </B>
+</p>
+
+
+```{r mortgages01BA , echo=TRUE, warning=FALSE,message=FALSE }
+dfMO$AllOrigination=dfMO$Mortgage_620_LS+dfMO$Mortgage_620_659 +dfMO$Mortgage_660_719+dfMO$Mortgage_720_759+dfMO$Mortgage_760_GT  
+
+# Summarize data by Year
+dfMOSummaryByYear <-  
+  sqldf("SELECT Year,'Mortgage' LoanType,SUM(AllOrigination) AllOriginationA
+        ,SUM(Mortgage_620_LS) Mortgage_620_LS
+        ,SUM(Mortgage_620_659) Mortgage_620_659
+        ,SUM(Mortgage_620_LS)+SUM(Mortgage_620_659)  Mortgage_660_LS
+        ,SUM(Mortgage_660_719) Mortgage_660_719
+        ,SUM(Mortgage_720_759) Mortgage_720_759
+        ,SUM(Mortgage_760_GT) Mortgage_760_GT
+        from dfMO GROUP BY Year") 
+
+
+# Do not plot less than 2004 and greate than 2019 year data (Partial dataset for quarters)
+p1 <- plot_ly(x = filter(dfMOSummaryByYear, dfMOSummaryByYear$Year  > 2003 & dfMOSummaryByYear$Year < 2020)$Year  ,
+              y =  filter(dfMOSummaryByYear, dfMOSummaryByYear$Year  > 2003 & dfMOSummaryByYear$Year < 2020)$AllOrigination ,
+              # transforms = list (list( type="filter",target=dfMOSummaryByYear$Year,operation='<',value = 2020)),
+              type = "bar") 
+
+p1 <- p1 %>% layout(title = "Mortgage Origination By Year (in Billions)",
+                     xaxis = list(title = ""),
+                     yaxis = list(title = ""))
+```
+
+
+```{r mortgages01BAC , echo=TRUE, warning=FALSE,message=FALSE }
+p1
+
+
+p1 <- plot_ly(filter(dfMOSummaryByYear, dfMOSummaryByYear$Year  > 2003 & dfMOSummaryByYear$Year < 2020)
+               ,x = ~Year ,type="scatter" ,y =  ~Mortgage_660_LS  
+              , mode = 'lines+markers'
+            )   
+
+p1 <- p1 %>% layout(title = "Mortgage Origination CreditScore less than 660 By Year (in Billions)",
+                    xaxis = list(title = ""),
+                    yaxis = list(title = ""))
+```
+<B>  After the 2008 subprime financial crash, mortgage origination in the lower credit score range saw the biggest decline, from 700 billion to 120 billion. Underwriting tightened, resulting in cautious originations. This has resulted in lower delinquency rates and lower risk portfolios for financial institutions. </B>
+```{r mortgages01A , echo=TRUE, warning=FALSE,message=FALSE }
+p1
+
+ 
+# Convert columns to Rows Key of record Year and Quarter and drop total columns before transform and rename column
+dfMOCopy <- dfMO[,c("Year", "Quarter", "Mortgage_620_LS","Mortgage_620_659","Mortgage_660_719","Mortgage_720_759","Mortgage_760_GT")]
+dfMOCreditScoreLevel <-  melt(dfMOCopy , id=c("Year","Quarter"))
+dfMOCreditScoreLevel <- dfMOCreditScoreLevel %>% 
+  dplyr::rename( 
+    "CreditQuality" = variable, "Origination"=value)   
+# Find mortgage origination drop in 2008
+OriginationGrowth2008= ( sum( filter(dfMOCreditScoreLevel, dfMOCreditScoreLevel$Year  == 2008)$Origination  )
+                        - sum( filter(dfMOCreditScoreLevel, dfMOCreditScoreLevel$Year  == 2007)$Origination  )
+) /sum( filter(dfMOCreditScoreLevel, dfMOCreditScoreLevel$Year  == 2007)$Origination  ) 
+
+################################## rename labels and Donut chart to show case % Origination by Type during 2006 and 2007 ###############
+
+dfMOCreditScoreLevel$CreditQuality <- replace(as.character(dfMOCreditScoreLevel$CreditQuality), dfMOCreditScoreLevel$CreditQuality == "Mortgage_620_LS", "<620")
+dfMOCreditScoreLevel$CreditQuality <- replace(as.character(dfMOCreditScoreLevel$CreditQuality), dfMOCreditScoreLevel$CreditQuality == "Mortgage_720_759", "720-759")
+dfMOCreditScoreLevel$CreditQuality <- replace(as.character(dfMOCreditScoreLevel$CreditQuality), dfMOCreditScoreLevel$CreditQuality == "Mortgage_760_GT", ">= 760")
+dfMOCreditScoreLevel$CreditQuality <- replace(as.character(dfMOCreditScoreLevel$CreditQuality), dfMOCreditScoreLevel$CreditQuality == "Mortgage_620_659", "620-659")
+dfMOCreditScoreLevel$CreditQuality <- replace(as.character(dfMOCreditScoreLevel$CreditQuality), dfMOCreditScoreLevel$CreditQuality == "Mortgage_660_719", "660-719")
+
+fig = plot_ly(filter(dfMOCreditScoreLevel, dfMOCreditScoreLevel$Year  == 2006 | dfMOCreditScoreLevel$Year  == 2007) ,
+              values = ~Origination, 
+              labels = ~CreditQuality,
+              type = "pie",
+              hole = 0.6,
+             # hovertemplate = "%{label} <br> %{value:$,0f} </br> %{percent} <extra></extra>",
+              showlegend = TRUE 
+)
+fig <- fig %>% layout(title = "Mortgage Origination spread by CreditScore (2006-07) " )
+```
+<B>If we take a deeper look in the percent of market originations by credit score pre-financial crisis, 25%   of the origination during 2006 & 2007 was in the lower band of credit score. There was a booming subprime mortgage market with loose lending standards. </B>
+```{r mortgages03 , echo=TRUE, warning=FALSE,message=FALSE }
+
+fig
+fig = plot_ly(filter(dfMOCreditScoreLevel, dfMOCreditScoreLevel$Year  == 2018 | dfMOCreditScoreLevel$Year  == 2019) ,
+              values = ~Origination, 
+              labels = ~CreditQuality,
+              type = "pie",
+              hole = 0.6,
+              # hovertemplate = "%{label} <br> %{value:$,0f} </br> %{percent} <extra></extra>",
+              showlegend = TRUE 
+)
+
+fig <- fig %>% layout(title = "Mortgage Origination spread by CreditScore (2018-19) " )
+```
+<B>The biggest increase of mortgage origination has been from the higher credit range following the financial crisis. This will help financial institutes with large mortgage portfolios to weather through the COVID-19 crisis.</B>
+```{r mortgages04 , echo=TRUE, warning=FALSE,message=FALSE }
+fig
+```
+<B> The current environment  of lower interest rates will generate boom for mortgage re-finance. During the 2008 crisis, new mortgage origination changed by  `r toString(scales::percent(OriginationGrowth2008))`. We may see housing sales decline significantly in the short term resulting in lower new mortgage origination. At the same time, the bad loan problem may not as big of an issue as compared to the 2008 period.</B>
+ 
+
+
+</html>

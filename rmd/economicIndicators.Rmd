@@ -1,0 +1,172 @@
+---
+title: "Economic Indicators & Loan Delinquency"
+date: "5/16/2020"
+output:
+  html_document:
+    code_folding: hide
+---
+
+<html>
+
+```{r setup, include=FALSE,message=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Data used in this analysis is collected from FED reserve Microeconomic Data.
+<p> </p></P>
+ 
+
+```{r , message=FALSE,warning=FALSE }
+library(treemap)
+library(data.tree)
+library(DiagrammeR) 
+library(GGally)
+
+library(DT)
+library(dplyr)
+library(tidyverse) 
+library(sqldf) 
+library(ggthemes)
+
+# This function takes data frame and year filter returns the tree structure 
+function.treeChart <- function (df,beginYear,endYear,fillColor) {
+  
+  sqlText = paste0 (
+    "SELECT Year,Quarter,LoanDQPercentGT90Days,UnemploymentRate,GDPGrowth from dfEconomicFactorDQBalance WHERE  Year <",
+    endYear,
+    " and Year > " ,
+    beginYear
+  )
+  dfEconomicFactorDQBalanceFiltered <-  sqldf(sqlText) 
+  
+  dfEconomicFactorDQBalanceFiltered$ "GDPGrowth"  <- as.numeric(as.character(dfEconomicFactorDQBalanceFiltered$"GDPGrowth"))
+  dfEconomicFactorDQBalanceFiltered[, 3] <- round(dfEconomicFactorDQBalanceFiltered[, 3], digits = 2)
+  dfEconomicFactorDQBalanceFiltered[, 4] <- round(dfEconomicFactorDQBalanceFiltered[, 4], digits = 2)
+  dfEconomicFactorDQBalanceFiltered[, 5] <- round(dfEconomicFactorDQBalanceFiltered[, 5], digits = 2)
+  
+  
+  dfEconomicFactorDQBalanceFiltered$TreeText = paste0(
+    dfEconomicFactorDQBalanceFiltered$Quarter,
+    "-  Delinquency gt 90 days: ", dfEconomicFactorDQBalanceFiltered$LoanDQPercentGT90Days
+    ,
+    "%     Unemployment Rate: ",dfEconomicFactorDQBalanceFiltered$UnemploymentRate,
+  #   toString(scales::percent(dfEconomicFactorDQBalanceFiltered$UnemploymentRate)) ,
+    "%     GDP Growth: ", dfEconomicFactorDQBalanceFiltered$GDPGrowth,"%"
+  #    toString(scales::percent(dfEconomicFactorDQBalanceFiltered$GDPGrowth)) 
+  )
+  
+  
+  dfEconomicFactorDQBalanceFiltered$pathString <- paste("All Loan Types",dfEconomicFactorDQBalanceFiltered$Year,dfEconomicFactorDQBalanceFiltered$TreeText,sep="/")
+  dfEconomicFactorDQBalanceGraph <- as.Node(dfEconomicFactorDQBalanceFiltered) 
+  SetGraphStyle(dfEconomicFactorDQBalanceGraph, rankdir = "TB")
+  SetEdgeStyle(dfEconomicFactorDQBalanceGraph, arrowhead = "vee", color = "grey35", penwidth = 2,)
+  SetNodeStyle(dfEconomicFactorDQBalanceGraph, style = "filled,rounded", shape = "box", fillcolor = fillColor,
+               fontname = "helvetica", tooltip = GetDefaultTooltip) 
+  p<-plot(dfEconomicFactorDQBalanceGraph) 
+  #return( p)
+  return(dfEconomicFactorDQBalanceGraph)
+  
+}
+```
+<b>
+ Input data layout </b>
+</P>
+```{r , message=FALSE,warning=FALSE }
+dfEconomicFactorDQBalance <- read.csv(file= "C:\\R\\RData\\EconomicFactorDQBalance.txt" , header=TRUE, quote = "\"", sep="\t")
+str(dfEconomicFactorDQBalance)
+dfDQBalance <- read.csv(file= "C:\\R\\RData\\DQPercent90PlusByLoanType.txt" , header=TRUE, quote = "\"", sep="\t")
+str(dfDQBalance)
+```
+
+<b>
+Contraction of GDP leads to unemployment. Unemployment tracks a close relationship with delinquency rates in non-collateral debt (Credit card, Personal, and Student loans). Labor market holds major significance on default rate. There have been number of studies about unemployment and charge off on collateral backed loans (Mortgage and HE) after 2008. Ratio of defaults between unemployed households with negative home equity and higher loan-to-value (LTV) to employed household with similar negative home equity was 4:1 immediately after 2008. Similar differences were observed in mortgage loans as well.
+</b>
+```{r , message=FALSE,warning=FALSE }
+dfLinePlotData <- sqldf("SELECT Year,LoanDQPercentGT90Days	 AS [Delinquency 90 plus] ,UnemploymentRate AS [Unemployment Rate] ,GDPGrowth
+  AS [Real GDP Growth],ConsumerConfidence [Consumer Confidence],BusinessConfidence  [Business Confidence]
+        from dfEconomicFactorDQBalance WHERE  Year < 2020 AND Quarter ='Q4' ")
+
+dfLinePlotData$ "Real GDP Growth"  <- as.numeric(as.character(dfLinePlotData$"Real GDP Growth"))
+
+# Line plot with multiple groups
+p <- ggplot() + geom_line(  data=dfLinePlotData, 
+                            aes(x=Year, y=`Delinquency 90 plus`) , size = 1 ) +  
+  geom_line(  data=dfLinePlotData, 
+              aes(x=Year, y=`Unemployment Rate`) ,col = "red", size = 1 )+   
+  
+  geom_line(  data=dfLinePlotData, 
+              aes(x=Year, y=`Real GDP Growth`),colour = "#1380A1", size = 1)+
+  labs(title="",
+       subtitle = "") +     
+  geom_text(aes(x = 2010, y = 10, label = "Unemployment rate" ))  +     
+  geom_text(aes(x = 2010, y = 0, label = "GDP Growth" ))  +     
+  geom_text(aes(x = 2010, y = 7, label = "DQ 90+ %" )) 
+
+p <- p + theme_classic() + labs(x = "Year", y = "% Rate")
+p
+```
+
+## Including Plots
+
+<B>
+FED data shows consumer loan default had doubled across all categories of the loans during financial crisis. The following charts shows loan level delinquency trend history over the last 15+ years. During 2008-2010, DQ rates went up by 100% across loan categories. Credit card DQ reached to 10%.
+</B></p>
+ 
+```{r , message=FALSE,warning=FALSE }
+
+dfDQYearEnd <-  
+  sqldf("
+SELECT Year,Auto,CreditCard ,Mortgage, HomeEquity, StudentLoan, Other 
+FROM dfDQBalance
+WHERE Quarter='Q4'")
+library(reshape)
+dfDQYearEndTranpos <- melt(dfDQYearEnd, id=c("Year")) 
+colnames(dfDQYearEndTranpos)[2] <- "LoanType"
+colnames(dfDQYearEndTranpos)[3] <- "DQ90plus" 
+
+p<- ggplot(dfDQYearEndTranpos, aes(x =  Year, y =  DQ90plus )) +
+  # geom_bar(stat ="sum",na.rm=TRUE, fill="steelblue")+
+  geom_bar(position=position_dodge(), stat="identity",
+           fill="steelblue",
+           size=.3)+
+  facet_wrap( ~ LoanType ) +
+  theme_solarized() +
+  theme(legend.key = element_rect(fill = NA),
+        legend.position = "bottom",
+        strip.background = element_rect(fill = NA))
+
+p
+
+```
+<b><p><p>
+Analysis of correlation matrix between GDP, unemployment rates, consumer confidence, and business confidence, and 90+ days DQ presented below. Co-relation matrix below shows strong positive relationship between DQ and unemployment with coefficient near 1. It also shows strong negative co-relation between real GDP and DQ rates.</p>
+Tree structure below that represents the dataset into the prior, during and after crisis numbers across multiple measures.
+</b>
+
+```{r ,message=FALSE ,warning=FALSE}
+# Summarize data by Year
+dfEconomicFactorDQBalanceCorr <-  
+  sqldf("SELECT LoanDQPercentGT90Days	 AS [DQ 90 plus] ,UnemploymentRate AS [Unemployment Rate] ,GDPGrowth
+  AS [GDP Growth],ConsumerConfidence [Consumer Confidence],BusinessConfidence  [Business Confidence]
+        from dfEconomicFactorDQBalance WHERE  Year < 2020 ") 
+# While reading data R considered negative sign as char so convert dataframe column to Numeric
+dfEconomicFactorDQBalanceCorr$ "GDP Growth"  <- as.numeric(as.character(dfEconomicFactorDQBalanceCorr$"GDP Growth"))
+# Correlation plot
+ggcorr(dfEconomicFactorDQBalanceCorr, palette = "RdBu", label = TRUE)
+```
+<p>
+## Prior to Crisis Quarterly data
+```{r }
+function.treeChart(dfEconomicFactorDQBalance,2004,2007,"bisque4")
+```
+<p>
+## During 2009-2010 period (Crisis period) Quarterly data
+```{r}
+print(function.treeChart(dfEconomicFactorDQBalance,2008,2011,"firebrick1"))
+```
+<p>
+## 2018-2019 Quarterly data
+```{r }
+print(function.treeChart(dfEconomicFactorDQBalance,2016,2019,"chartreuse4") )
+```
+<p>
+

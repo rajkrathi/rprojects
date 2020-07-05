@@ -1,0 +1,156 @@
+---
+title: "Unemployment History"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: false
+    theme: lumen
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Unemployment rates
+
+This is API connector to FED data source to extract unemployment series for all the states from available history.
+
+```{r warning=FALSE,message=FALSE}
+#https://research.stlouisfed.org/useraccount/login/secure/
+
+#https://cran.r-project.org/web/packages/tidyquant/vignettes/TQ00-introduction-to-tidyquant.html
+#library(tidyquant)
+library(httr)
+library(jsonlite)
+library(formattable)
+library(USAboundaries)
+library(dplyr)
+library(DT)
+apiKey <- ""
+### Reading API key value ####
+source("C:/R/Code/apiKey.r")
+
+df_State_Code <- state_codes
+
+#---- Find the FED series and get data directly ---- Loop thru multiple states and combine data frame
+if (exists("dfAllStateEmployment") == TRUE)
+  remove(dfAllStateEmployment)
+dfAllStateEmployment <- data.frame()
+
+### For each of the state code get unemployment rates
+for (state_abbr    in df_State_Code$state_abbr)
+{
+  # Call Fred and download data
+  if (state_abbr != "")
+  {
+    series = paste0(state_abbr, 'UR')
+    URI <-
+      paste0 (
+        "https://api.stlouisfed.org/fred/series/observations?series_id=",
+        series,
+        "&api_key=",
+        apiKey,
+        "&file_type=json"
+      )
+    URIData <- GET(URI)
+    #Check if the call was successful - If yes then add append data frames to combine data
+    if (status_code(URIData) == 200)
+    {
+      dfUnemployment <- data.frame(fromJSON (content(URIData, as = "text")))
+      dfUnemployment$StateCode = state_abbr
+      dfUnemployment$StateName = df_State_Code[df_State_Code$state_abbr == state_abbr, ]$state_name
+      if (nrow(dfUnemployment)  > 0)
+      {
+        dfAllStateEmployment <-
+          rbind(dfAllStateEmployment, dfUnemployment)
+      }
+    }
+    
+  }
+}
+
+```
+##  Summarize data by state
+
+This provides state level summary
+
+```{r warning=FALSE,message=FALSE}
+
+dfAllStateEmployment$observations.value <- as.numeric(dfAllStateEmployment$observations.value) 
+dfAllStateEmployment$observations.date <- as.Date(dfAllStateEmployment$observations.date) 
+dfEmploymentSummary <- dfAllStateEmployment %>%
+  group_by(StateCode) %>%
+  summarise(AvgUnemployment=mean(observations.value),MedianUnemployment= median(observations.value)
+            ,MinUnemployment= min(observations.value)
+            ,MaxUnemployment= max(observations.value)
+            ,StandardDeviation= sd(observations.value)
+            ,NbrOfObservations= n()
+            )
+ 
+datatable(
+  dfEmploymentSummary
+  ,filter = "none"
+  ,rownames = FALSE
+  ,caption = htmltools::tags$caption(style = 'caption-side: top; text-align: center; font-size: 20px;font-weight: 900',
+                                     "Summary Data")
+  
+  ,options = list(    searching = FALSE,    ordering = FALSE,    paging = FALSE ,width="80%",
+                      initComplete = JS(
+                        "function(settings, json) {",
+                        "$(this.api().table().header()).css({'background-color': '#000', 'color': '#fff'});",
+                        "}")
+  )
+  ,colnames = c('State Code','Avg Unemp Rate','Median Unemp Rate','Min Unemp Rate','Max Unemp Rate' ,'std Unemp Rate','# observations'  )
+) %>%
+  formatRound(    c(  'AvgUnemployment' , 'MedianUnemployment', 'MinUnemployment', 'MaxUnemployment','StandardDeviation' ),
+                       digits = 3,
+                       interval = 3,
+                       mark = ",",
+                       dec.mark = getOption("OutDec")
+  ) 
+
+
+ 
+```
+</p>
+##  Current Unemployment
+
+Get the latest month unemployment data 
+```{r}
+
+maxDate = (dfAllStateEmployment %>% 
+  summarise(MaxDate=max(observations.date)))$MaxDate[1] 
+df <- 
+dfAllStateEmployment[dfAllStateEmployment$observations.date == maxDate , ]
+ 
+df <-  df[,c(StateName="StateName",StateCode="StateCode", Date="observations.date",UnemploymentRate="observations.value")] 
+
+datatable(
+  df
+  ,filter = "none"
+  ,rownames = FALSE
+  ,caption = htmltools::tags$caption(style = 'caption-side: top; text-align: center; font-size: 20px;font-weight: 900',
+                                     "Current Unemployment Rates")
+  
+  ,options = list(    searching = FALSE,    ordering = FALSE,    paging = FALSE ,width="80%",
+                      initComplete = JS(
+                        "function(settings, json) {",
+                        "$(this.api().table().header()).css({'background-color': '#000', 'color': '#fff'});",
+                        "}")
+  )
+  ,colnames = c('State Name','State Code','Date','Unemployment Rate' )
+) %>%
+  formatRound(    c(  'observations.value'  ),
+                       digits = 2,
+                       interval = 3,
+                       mark = ",",
+                       dec.mark = getOption("OutDec")
+  ) 
+
+ 
+```
+</p>

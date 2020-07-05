@@ -1,0 +1,20 @@
+---
+title: "Untitled"
+author: ""
+date: ""
+output: html_document
+params: 
+  prjName: "The project name"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+readname = function()# Get the project name
+{ 
+  params$prjName
+}
+prjName=readname()
+prjName
